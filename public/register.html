@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register - Namaz Times</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-green-50 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded shadow-md w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-6 text-center">Register for Namaz Times</h1>
+    <div id="error-msg" class="text-red-600 mb-4"></div>
+    <div id="success-msg" class="text-green-600 mb-4 hidden"></div>
+
+    <div id="regular-fields">
+      <input id="first-name" type="text" placeholder="First Name" class="w-full p-3 border rounded mb-4" required />
+      <input id="last-name" type="text" placeholder="Last Name" class="w-full p-3 border rounded mb-4" required />
+      <input id="dob" type="date" placeholder="Date of Birth" class="w-full p-3 border rounded mb-4" required />
+      <input id="age" type="number" placeholder="Age" class="w-full p-3 border rounded mb-4" readonly />
+      <input id="contact-number" type="tel" placeholder="Contact Number" class="w-full p-3 border rounded mb-4" required />
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-gray-700 font-bold mb-2">
+        Asr Calculation Method:
+      </label>
+      <div class="flex items-center">
+        <label class="mr-4">
+          <input type="radio" id="asr-hanafi" name="asrCalculation" value="1" class="mr-2" checked> Hanafi
+        </label>
+        <label>
+          <input type="radio" id="asr-shafi" name="asrCalculation" value="0" class="mr-2"> Shafi
+        </label>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-gray-700 font-bold mb-2">
+        Register as a Teacher?
+      </label>
+      <div class="flex items-center">
+        <label class="mr-4">
+          <input type="radio" id="teacher-yes" name="isTeacher" value="yes" class="mr-2"> Yes
+        </label>
+        <label>
+          <input type="radio" id="teacher-no" name="isTeacher" value="no" class="mr-2" checked> No
+        </label>
+      </div>
+    </div>
+
+    <div id="teacher-fields" class="hidden">
+      <input id="zipcode" type="text" placeholder="Zipcode" class="w-full p-3 border rounded mb-4" />
+      <input id="area" type="text" placeholder="Area" class="w-full p-3 border rounded mb-4" />
+      <input id="city" type="text" placeholder="City" class="w-full p-3 border rounded mb-4" />
+      <div class="mb-4">
+        <label class="block text-gray-700 font-bold mb-2">
+          Are you a Hafiz?
+        </label>
+        <div class="flex items-center">
+          <label class="mr-4">
+            <input type="radio" id="hafiz-yes" name="isHafiz" value="yes" class="mr-2"> Yes
+          </label>
+          <label>
+            <input type="radio" id="hafiz-no" name="isHafiz" value="no" class="mr-2" checked> No
+          </label>
+        </div>
+      </div>
+      
+      <div id="hafiz-fields" class="hidden">
+        <label class="block text-gray-700 font-bold mb-2">Hafiz Certificate Document</label>
+        <input type="file" id="hafiz-doc" class="w-full p-3 border rounded mb-4" />
+        <p class="text-sm text-gray-500 mb-4">Max file size: 1MB. Accepted formats: PDF, DOC/DOCX, and images.</p>
+        <label class="block text-gray-700 font-bold mb-2">Years of experience (Hafiz)</label>
+        <input type="number" id="hafiz-experience" placeholder="Years of Experience" class="w-full p-3 border rounded mb-4" />
+      </div>
+
+      <div id="mufti-fields" class="hidden">
+        <label class="block text-gray-700 font-bold mb-2">
+          Are you a Mufti?
+        </label>
+        <div class="flex items-center mb-4">
+          <label class="mr-4">
+            <input type="radio" id="mufti-yes" name="isMufti" value="yes" class="mr-2"> Yes
+          </label>
+          <label>
+            <input type="radio" id="mufti-no" name="isMufti" value="no" class="mr-2" checked> No
+          </label>
+        </div>
+
+        <div id="mufti-doc-field" class="hidden">
+          <label class="block text-gray-700 font-bold mb-2">Mufti Certificate Document</label>
+          <input type="file" id="mufti-doc" class="w-full p-3 border rounded mb-4" />
+          <p class="text-sm text-gray-500 mb-4">Max file size: 1MB. Accepted formats: PDF, DOC/DOCX, and images.</p>
+          <label class="block text-gray-700 font-bold mb-2">Years of experience (Mufti)</label>
+          <input type="number" id="mufti-experience" placeholder="Years of Experience" class="w-full p-3 border rounded mb-4" />
+        </div>
+      </div>
+    </div>
+      
+    <div id="shared-fields">
+      <input id="email" type="email" placeholder="Email" class="w-full p-3 border rounded mb-4" required />
+      <input id="password" type="password" placeholder="Password (min 8 characters, at least 1 special character)" class="w-full p-3 border rounded mb-4" required />
+      <input id="confirm-password" type="password" placeholder="Confirm Password" class="w-full p-3 border rounded mb-4" required />
+    </div>
+
+    <button id="register-btn" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700">Register</button>
+    <div class="mt-4 text-center text-sm">
+      <a href="login.html" class="text-green-700 hover:underline">Back to Login</a>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import the services you need from your firebase-config.js file
+    import { auth, db, storage } from "./js/firebase-config.js"; 
+
+    // Import the specific modular functions from their respective Firebase SDKs
+    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import { setDoc, doc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+    import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-storage.js";
+
+    // All your code from here remains the same, but it now uses the imported
+    // `auth`, `db`, and `storage` objects.
+    const registerBtn = document.getElementById('register-btn');
+    const errorMsg = document.getElementById('error-msg');
+    const successMsg = document.getElementById('success-msg');
+    const dobInput = document.getElementById('dob');
+    const ageInput = document.getElementById('age');
+
+    const asrCalculationRadios = document.getElementsByName('asrCalculation');
+    const isTeacherRadios = document.getElementsByName('isTeacher');
+    const teacherFields = document.getElementById('teacher-fields');
+    const zipcodeInput = document.getElementById('zipcode');
+    const areaInput = document.getElementById('area');
+    const cityInput = document.getElementById('city');
+
+    const isHafizRadios = document.getElementsByName('isHafiz');
+    const hafizFields = document.getElementById('hafiz-fields');
+    const hafizDocInput = document.getElementById('hafiz-doc');
+    const hafizExperienceInput = document.getElementById('hafiz-experience');
+    const isMuftiRadios = document.getElementsByName('isMufti');
+    const muftiFields = document.getElementById('mufti-fields');
+    const muftiDocField = document.getElementById('mufti-doc-field');
+    const muftiDocInput = document.getElementById('mufti-doc');
+    const muftiExperienceInput = document.getElementById('mufti-experience');
+    const sharedFields = document.getElementById('shared-fields');
+    const regularFields = document.getElementById('regular-fields');
+
+    function calculateAge(dob) {
+      const birthDate = new Date(dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDifference = today.getMonth() - birthDate.getMonth();
+      if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    }
+
+    dobInput.addEventListener('change', () => {
+      const dob = dobInput.value;
+      if (dob) {
+        const age = calculateAge(dob);
+        ageInput.value = age;
+      } else {
+        ageInput.value = '';
+      }
+    });
+
+    isTeacherRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'yes') {
+          teacherFields.classList.remove('hidden');
+          isHafizRadios.forEach(r => r.checked = (r.value === 'no'));
+          hafizFields.classList.add('hidden');
+          isMuftiRadios.forEach(r => r.checked = (r.value === 'no'));
+          muftiFields.classList.add('hidden');
+          muftiDocField.classList.add('hidden');
+        } else {
+          teacherFields.classList.add('hidden');
+        }
+      });
+    });
+
+    isHafizRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'yes') {
+          hafizFields.classList.remove('hidden');
+          muftiFields.classList.remove('hidden');
+          errorMsg.textContent = '';
+        } else {
+          hafizFields.classList.add('hidden');
+          muftiFields.classList.add('hidden');
+        }
+      });
+    });
+
+    isMuftiRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'yes') {
+          muftiDocField.classList.remove('hidden');
+        } else {
+          muftiDocField.classList.add('hidden');
+        }
+      });
+    });
+
+    registerBtn.addEventListener('click', async () => {
+      errorMsg.textContent = '';
+      successMsg.classList.add('hidden');
+
+      const isTeacher = document.querySelector('input[name="isTeacher"]:checked').value === 'yes';
+      const asrCalculation = document.querySelector('input[name="asrCalculation"]:checked').value;
+      
+      const firstName = document.getElementById('first-name').value.trim();
+      const lastName = document.getElementById('last-name').value.trim();
+      const dob = dobInput.value;
+      const age = ageInput.value;
+      const contactNumber = document.getElementById('contact-number').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+
+      // Basic form validation
+      if (!firstName || !lastName || !dob || !age || !contactNumber || !email || !password || !confirmPassword) {
+        errorMsg.textContent = 'Please fill all fields.';
+        return;
+      }
+      if (password !== confirmPassword) {
+        errorMsg.textContent = 'Passwords do not match.';
+        return;
+      }
+      if (!validatePassword(password)) {
+        errorMsg.textContent = 'Password must be at least 8 characters long and contain at least one special character.';
+        return;
+      }
+
+      let role = 'appUser';
+      let hafizDocURL = null;
+      let muftiDocURL = null;
+      let hafizExperience = null;
+      let muftiExperience = null;
+      let zipcode = null;
+      let area = null;
+      let city = null;
+
+      if (isTeacher) {
+        zipcode = zipcodeInput.value.trim();
+        area = areaInput.value.trim();
+        city = cityInput.value.trim();
+
+        if (!zipcode || !area || !city) {
+            errorMsg.textContent = 'Please fill all teacher location fields (Zipcode, Area, City).';
+            return;
+        }
+
+        const isHafiz = document.querySelector('input[name="isHafiz"]:checked').value === 'yes';
+
+        if (!isHafiz) {
+          errorMsg.textContent = 'Only Certified Hafiz can be a teacher.';
+          return;
+        }
+
+        const hafizDocFile = hafizDocInput.files[0];
+        if (!hafizDocFile) {
+          errorMsg.textContent = 'Please upload your Hafiz certificate.';
+          return;
+        }
+
+        const isMufti = document.querySelector('input[name="isMufti"]:checked').value === 'yes';
+        const muftiDocFile = muftiDocInput.files[0];
+        
+        if (isMufti && !muftiDocFile) {
+          errorMsg.textContent = 'Please upload your Mufti certificate.';
+          return;
+        }
+
+        hafizExperience = document.getElementById('hafiz-experience').value;
+        muftiExperience = isMufti ? document.getElementById('mufti-experience').value : null;
+
+        role = isMufti ? 'Hafiz/Mufti' : 'Hafiz';
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userId = userCredential.user.uid;
+
+        if (isTeacher) {
+          const hafizDocFile = hafizDocInput.files[0];
+          const hafizStorageRef = ref(storage, `teacher_documents/${userId}/hafiz_certificate_${hafizDocFile.name}`);
+          await uploadBytes(hafizStorageRef, hafizDocFile);
+          hafizDocURL = await getDownloadURL(hafizStorageRef);
+          
+          const isMufti = document.querySelector('input[name="isMufti"]:checked').value === 'yes';
+          if (isMufti) {
+            const muftiDocFile = muftiDocInput.files[0];
+            const muftiStorageRef = ref(storage, `teacher_documents/${userId}/mufti_certificate_${muftiDocFile.name}`);
+            await uploadBytes(muftiStorageRef, muftiDocFile);
+            muftiDocURL = await getDownloadURL(muftiStorageRef);
+          }
+        }
+
+        const userData = {
+          firstName,
+          lastName,
+          dob,
+          age,
+          contactNumber,
+          email,
+          role,
+          masjidId: null,
+          asrCalculationSchool: asrCalculation
+        };
+
+        if (isTeacher) {
+          userData.zipcode = zipcode;
+          userData.area = area;
+          userData.city = city;
+          userData.hafizDocURL = hafizDocURL;
+          userData.hafizExperience = hafizExperience;
+          if (muftiDocURL) {
+            userData.muftiDocURL = muftiDocURL;
+            userData.muftiExperience = muftiExperience;
+          }
+        }
+        
+        await setDoc(doc(db, 'users', userId), userData);
+
+        successMsg.textContent = 'Registration successful! Please log in.';
+        successMsg.classList.remove('hidden');
+        clearAllFields();
+
+      } catch (error) {
+        console.error("Error during registration:", error);
+        errorMsg.textContent = error.message;
+      }
+    });
+
+    function validatePassword(password) {
+      const regex = /^(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+      return regex.test(password);
+    }
+
+    function clearAllFields() {
+      document.getElementById('first-name').value = '';
+      document.getElementById('last-name').value = '';
+      dobInput.value = '';
+      ageInput.value = '';
+      document.getElementById('contact-number').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('confirm-password').value = '';
+      
+      document.getElementById('asr-hanafi').checked = true;
+
+      isTeacherRadios.forEach(r => r.checked = (r.value === 'no'));
+      teacherFields.classList.add('hidden');
+      zipcodeInput.value = '';
+      areaInput.value = '';
+      cityInput.value = '';
+
+      isHafizRadios.forEach(r => r.checked = (r.value === 'no'));
+      hafizFields.classList.add('hidden');
+      isMuftiRadios.forEach(r => r.checked = (r.value === 'no'));
+      muftiFields.classList.add('hidden');
+      muftiDocField.classList.add('hidden');
+      if (hafizDocInput) hafizDocInput.value = '';
+      if (muftiDocInput) muftiDocInput.value = '';
+      if (hafizExperienceInput) hafizExperienceInput.value = '';
+      if (muftiExperienceInput) muftiExperienceInput.value = '';
+    }
+  </script>
+</body>
+</html>
