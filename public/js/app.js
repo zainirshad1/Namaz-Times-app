@@ -1,150 +1,104 @@
-// Import Firebase services from your configuration file
-import { auth, db } from "./firebase-config.js";
-import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.15.0/firebase-auth.js";
-import { doc, setDoc, getDoc, updateDoc, collection, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.15.0/firebase-firestore.js";
+// app.js
 
-// Global variables for application state
-let userId = null;
-let isReadingActive = false;
-let isPlaying = false;
-let currentTab = 'listen'; // Default tab on load
-let surahs = [];
-let reciters = [];
-let scripts = [];
-let currentSurahData = null;
-let currentSurahAudioData = null;
-let listeningAyahIndex = 0;
-let currentAyahIndex = 0;
-let currentPlaybackSpeed = 1.0;
+import { auth, db } from './firebase-config.js';
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { collection, getDocs, doc, getDoc, query, where, FieldPath } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-// Firestore collection name for user progress
-const PROGRESS_COLLECTION = "userProgress";
+const authSection = document.getElementById('auth-section');
+const masjidSelect = document.getElementById('masjid-select');
+const addMasjidBtn = document.getElementById('add-masjid-btn');
+const addPrayerBtn = document.getElementById('add-prayer-btn');
+const prayerTimesDiv = document.getElementById('prayer-times');
 
-// HTML element references
-const userDisplayStatus = document.getElementById('user-display-status');
-const loadingSpinner = document.getElementById('loading-spinner');
-const errorMessage = document.getElementById('error-message');
-const saveConfirmationMessage = document.getElementById('save-confirmation-message');
-const readingSummary = document.getElementById('reading-summary');
-const surahSelectRead = document.getElementById('surah-select-read');
-const ayahSelect = document.getElementById('ayah-select');
-const startDoneReadingBtn = document.getElementById('start-done-reading-btn');
+// Use onAuthStateChanged from the modular API
+onAuthStateChanged(auth, async user => {
+  authSection.innerHTML = '';
+  if (user) {
+    const userEmail = document.createElement('span');
+    userEmail.textContent = user.email;
+    const logoutBtn = document.createElement('button');
+    logoutBtn.textContent = 'Logout';
+    logoutBtn.className = 'bg-red-600 px-3 py-1 rounded hover:bg-red-700';
+    logoutBtn.onclick = () => auth.signOut(); // signOut is still a method on auth
+    authSection.appendChild(userEmail);
+    authSection.appendChild(logoutBtn);
 
-// Utility functions
-function showLoading() {
-    if (loadingSpinner) {
-        loadingSpinner.classList.remove('hidden');
+    const userRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userRef);
+
+    if (userDoc.exists()) {
+      const role = userDoc.data().role;
+      if (role === 'superadmin') {
+        addMasjidBtn.classList.remove('hidden');
+        addPrayerBtn.classList.remove('hidden');
+        loadMasjids();
+      } else if (role === 'masjidAdmin') {
+        addMasjidBtn.classList.remove('hidden');
+        addPrayerBtn.classList.remove('hidden');
+        loadMasjids([userDoc.data().masjidId]);
+      } else {
+        addMasjidBtn.classList.add('hidden');
+        addPrayerBtn.classList.add('hidden');
+        loadMasjids();
+      }
+    } else {
+      addMasjidBtn.classList.add('hidden');
+      addPrayerBtn.classList.add('hidden');
+      loadMasjids();
     }
+  } else {
+    const loginBtn = document.createElement('button');
+    loginBtn.textContent = 'Login';
+    loginBtn.className = 'bg-green-600 px-3 py-1 rounded hover:bg-green-700';
+    loginBtn.onclick = () => window.location.href = 'login.html';
+    authSection.appendChild(loginBtn);
+
+    addMasjidBtn.classList.add('hidden');
+    addPrayerBtn.classList.add('hidden');
+    loadMasjids();
+  }
+});
+
+async function loadMasjids(filterIds) {
+  const masjidsCollection = collection(db, 'masjids');
+  let masjidsQuery = masjidsCollection;
+
+  if (filterIds && filterIds.length > 0) {
+    masjidsQuery = query(masjidsCollection, where(FieldPath.documentId(), 'in', filterIds));
+  }
+  const snapshot = await getDocs(masjidsQuery);
+
+  masjidSelect.innerHTML = '<option value="">Choose nearby masjid</option>';
+  snapshot.forEach(doc => {
+    const option = document.createElement('option');
+    option.value = doc.id;
+    option.textContent = doc.data().name;
+    masjidSelect.appendChild(option);
+  });
 }
 
-function hideLoading() {
-    if (loadingSpinner) {
-        loadingSpinner.classList.add('hidden');
-    }
-}
+masjidSelect.addEventListener('change', async () => {
+  const masjidId = masjidSelect.value;
+  if (!masjidId) {
+    prayerTimesDiv.innerHTML = '';
+    return;
+  }
+  const masjidRef = doc(db, 'masjids', masjidId);
+  const docSnap = await getDoc(masjidRef);
 
-function showError(message) {
-    if (errorMessage) {
-        errorMessage.textContent = message;
-        errorMessage.classList.remove('hidden');
-    }
-}
-
-function clearError() {
-    if (errorMessage) {
-        errorMessage.classList.add('hidden');
-    }
-}
-
-function showConfirmation(message) {
-    if (saveConfirmationMessage) {
-        saveConfirmationMessage.textContent = message;
-        saveConfirmationMessage.classList.remove('hidden');
-        setTimeout(() => {
-            saveConfirmationMessage.classList.add('hidden');
-        }, 3000);
-    }
-}
-
-function setDisplayUsername(email, uid) {
-    if (userDisplayStatus) {
-        userDisplayStatus.textContent = email ? `Welcome, ${email} (UID: ${uid})` : `Welcome, Guest (UID: ${uid})`;
-    }
-}
-
-// Load reading progress
-async function loadReadingProgress() {
-    if (!userId) return;
-    const userProgressDocRef = doc(db, PROGRESS_COLLECTION, userId);
-    try {
-        const docSnap = await getDoc(userProgressDocRef);
-        if (docSnap.exists() && docSnap.data().lastRead) {
-            const { surahNumber, ayahIndex } = docSnap.data().lastRead;
-            if (surahSelectRead) surahSelectRead.value = surahNumber;
-            currentAyahIndex = ayahIndex;
-            showConfirmation(`Resumed from Surah ${surahNumber}, Ayah ${ayahIndex + 1}.`);
-        }
-    } catch (error) {
-        console.error("Error loading reading progress:", error);
-        showError("Failed to load reading progress. Permissions issue.");
-    }
-}
-
-// Save reading progress
-async function saveReadingProgress() {
-    if (!userId) return;
-    const userProgressDocRef = doc(db, PROGRESS_COLLECTION, userId);
-    try {
-        await setDoc(userProgressDocRef, {
-            lastRead: {
-                surahNumber: parseInt(surahSelectRead.value),
-                ayahIndex: currentAyahIndex
-            },
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-        showConfirmation("Reading progress saved!");
-    } catch (error) {
-        console.error("Error saving reading progress:", error);
-        showError("Failed to save reading progress. Permissions issue.");
-    }
-}
-
-// Test write operation
-async function testWriteOperation() {
-    if (!userId) return;
-    try {
-        await setDoc(doc(db, PROGRESS_COLLECTION, userId), { testField: "testValue" });
-        console.log("Test write successful");
-    } catch (error) {
-        console.error("Test write failed:", error);
-    }
-}
-
-// Initialize Firebase, authenticate user, and set up event listeners
-async function initializeAppAndListeners() {
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            userId = user.uid;
-            setDisplayUsername(user.email, user.uid);
-            console.log("User  is authenticated. userId:", userId);
-            await Promise.all([
-                loadReadingProgress(),
-                testWriteOperation() // Test write operation on user login
-            ]);
-        } else {
-            try {
-                const anonymousUser Credential = await signInAnonymously(auth);
-                userId = anonymousUser Credential.user.uid;
-                setDisplayUsername(null, userId);
-                console.log("Signed in anonymously. userId:", userId);
-                await testWriteOperation(); // Test write operation for anonymous user
-            } catch (e) {
-                console.error("Error signing in anonymously:", e);
-                showError("Could not sign in as guest. Please ensure Anonymous Auth is enabled in Firebase.");
-            }
-        }
-    });
-}
-
-// Initialize the app when the window loads
-window.onload = initializeAppAndListeners;
+  if (!docSnap.exists()) {
+    prayerTimesDiv.innerHTML = '<p>No prayer times found.</p>';
+    return;
+  }
+  const data = docSnap.data();
+  prayerTimesDiv.innerHTML = `
+    <div class="prayer-card">
+      <div><h3>Fajr</h3><p>${data.Fajr || 'N/A'}</p></div>
+      <div><h3>Dhuhr</h3><p>${data.Dhuhr || 'N/A'}</p></div>
+      <div><h3>Asr</h3><p>${data.Asr || 'N/A'}</p></div>
+      <div><h3>Maghrib</h3><p>${data.Maghrib || 'N/A'}</p></div>
+      <div><h3>Isha</h3><p>${data.Isha || 'N/A'}</p></div>
+      <div><h3>Jumuah</h3><p>${data.Jumuah || 'N/A'}</p></div>
+    </div>
+  `;
+});
