@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quran App</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Tailwind CSS CDN (Optional, if you want to use Tailwind for quran.html) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <header class="flex justify-between items-center p-4 bg-green-700 text-white shadow-md">
+        <div class="flex items-center space-x-4">
+            <a href="index.html" class="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-colors flex items-center">
+                <i class="fas fa-arrow-left mr-2"></i>Namaz Portal
+            </a>
+            <h1 class="text-3xl font-bold">Quran App</h1>
+        </div>
+        <!-- This auth-section will be populated by quran-auth-display.js -->
+        <div id="auth-section" class="flex items-center space-x-4">
+            <span id="quran-user-name" class="font-semibold text-lg">Guest</span>
+            <button id="quran-logout-btn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-colors hidden">Logout</button>
+            <a href="login.html" id="quran-login-btn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-colors">Login</a>
+        </div>
+    </header>
+    <main class="container mx-auto px-4 py-8">
+        <div class="user-display">
+            <span id="user-display-status"></span>
+        </div>
+
+        <section id="user-dashboard" class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Your Progress</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="stat-card p-4 bg-green-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Read Today</h3>
+                    <p id="total-read-today" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-green-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Read This Week</h3>
+                    <p id="total-read-week" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-green-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Read This Month</h3>
+                    <p id="total-read-month" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-green-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Read Overall</h3>
+                    <p id="total-read-overall" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-blue-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Heard Today</h3>
+                    <p id="total-listen-today" class="text-3xl font-bold text-blue-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-blue-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Heard This Week</h3>
+                    <p id="total-listen-week" class="text-3xl font-bold text-blue-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-blue-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Heard This Month</h3>
+                    <p id="total-listen-month" class="text-3xl font-bold text-blue-600">0</p>
+                </div>
+                <div class="stat-card p-4 bg-blue-50 rounded-lg text-center shadow">
+                    <h3 class="font-semibold text-gray-700">Ayahs Heard Overall</h3>
+                    <p id="total-listen-overall" class="text-3xl font-bold text-blue-600">0</p>
+                </div>
+            </div>
+            <div class="total-rewards-card mt-6 p-4 bg-yellow-50 rounded-lg text-center shadow-lg">
+                <h3 class="font-semibold text-gray-700">Rewards Accumulated (Total Ayahs)</h3>
+                <p id="rewards-accumulated" class="text-4xl font-bold text-yellow-700">0</p>
+            </div>
+        </section>
+
+        <div class="controls-container bg-white rounded-lg shadow-lg p-6">
+            <div class="tab-buttons flex space-x-4 mb-4 border-b pb-4">
+                <button id="tab-listen" class="tab-button active px-4 py-2 rounded-md bg-green-500 text-white hover:bg-green-600 transition-colors">Listen</button>
+                <button id="tab-read" class="tab-button px-4 py-2 rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">Read</button>
+            </div>
+
+            <div id="listen-tab-content">
+                <div class="selection-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="dropdown-container">
+                        <label for="surah-select" class="block text-sm font-medium text-gray-700 mb-1">Surah:</label>
+                        <select id="surah-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                    <div class="dropdown-container" id="reciter-container">
+                        <label for="reciter-select" class="block text-sm font-medium text-gray-700 mb-1">Reciter:</label>
+                        <select id="reciter-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                    <div class="dropdown-container" id="speed-container">
+                        <label for="speed-select" class="block text-sm font-medium text-gray-700 mb-1">Speed:</label>
+                        <select id="speed-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+                            <option value="1.0">1.0x (Normal)</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="0.75">0.75x</option>
+                        </select>
+                    </div>
+                    <div class="dropdown-container" id="script-container">
+                        <label for="script-select" class="block text-sm font-medium text-gray-700 mb-1">Script:</label>
+                        <select id="script-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                </div>
+                <div class="player-controls flex space-x-4 justify-center">
+                    <button id="play-pause-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-full shadow-lg flex items-center transition-colors">
+                        <i class="fas fa-play mr-2"></i> Play
+                    </button>
+                    <button id="stop-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-full shadow-lg flex items-center transition-colors">
+                        <i class="fas fa-stop mr-2"></i> Stop
+                    </button>
+                </div>
+                <audio id="quran-audio" controls class="mt-4 w-full"></audio>
+                <div id="quran-display" class="listen-mode mt-6 p-4 border border-gray-200 rounded-md bg-gray-50 text-gray-800 text-lg leading-relaxed"></div>
+            </div>
+
+            <div id="read-tab-content" class="hidden">
+                <div class="selection-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div class="dropdown-container">
+                        <label for="surah-select-read" class="block text-sm font-medium text-gray-700 mb-1">Surah:</label>
+                        <select id="surah-select-read" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                    <div class="dropdown-container">
+                        <label for="ayah-select" class="block text-sm font-medium text-gray-700 mb-1">Ayah:</label>
+                        <select id="ayah-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                    <div class="dropdown-container" id="script-container-read">
+                        <label for="script-select-read" class="block text-sm font-medium text-gray-700 mb-1">Script:</label>
+                        <select id="script-select-read" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"></select>
+                    </div>
+                </div>
+                <div class="reading-controls flex space-x-4 justify-center">
+                    <button id="prev-ayah-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full shadow-lg flex items-center transition-colors">
+                        <i class="fas fa-chevron-left mr-2"></i> Previous
+                    </button>
+                    <button id="start-done-reading-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-full shadow-lg flex items-center transition-colors">
+                        <i class="fas fa-play mr-2"></i> Start Reading
+                    </button>
+                    <button id="next-ayah-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full shadow-lg flex items-center transition-colors">
+                        Next <i class="fas fa-chevron-right ml-2"></i>
+                    </button>
+                </div>
+                <div id="quran-display-read" class="read-mode mt-6 p-4 border border-gray-200 rounded-md bg-gray-50 text-gray-800 text-lg leading-relaxed"></div>
+            </div>
+        </div>
+
+        <div id="loading-spinner" class="hidden text-center mt-8 text-green-700 text-4xl">
+            <i class="fas fa-spinner fa-spin"></i> Loading...
+        </div>
+        <p id="error-message" class="error-message hidden text-center text-red-500 mt-4"></p>
+        <p id="save-confirmation-message" class="confirmation-message hidden text-center text-green-500 mt-4"></p>
+        <p id="reading-summary" class="summary-message hidden text-center text-gray-600 mt-4"></p>
+    </main>
+
+    <!-- Import Firebase config and the new quran-auth-display.js for session management -->
+    <script type="module" src="js/firebase-config.js"></script>
+    <script type="module" src="js/quran-auth-display.js"></script>
+    <script type="module" src="js/quran-app.js"></script>
+</body>
+</html>
