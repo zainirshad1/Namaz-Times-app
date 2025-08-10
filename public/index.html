@@ -3,158 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Namaz Times</title>
+    <title>Prayer Times App</title>
     <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts Poppins -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Custom CSS for specific styles (moved from inline) -->
-    <link rel="stylesheet" href="./css/indexstyle.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Your custom CSS with the new name -->
+    <link rel="stylesheet" href="css/namaztimestyle.css">
 </head>
-<body class="min-h-screen flex flex-col bg-gradient-to-b from-green-50 to-white">
-
-    <!-- Header Section -->
-    <div class="bg-gradient-to-r from-green-600 to-green-800 text-white py-6 px-6 flex flex-col sm:flex-row justify-between items-center rounded-b-3xl shadow-lg">
-        <div class="flex-grow">
-            <h1 class="text-3xl font-bold mb-1">Namaz Times</h1>
-            <p id="current-time-header" class="text-green-100 text-lg">Loading time...</p>
-            <p class="text-green-100 text-sm"><span id="current-day">Loading day...</span>, <span id="current-date">Loading date...</span></p>
-            <p id="hijri-date" class="text-green-100 text-sm">Loading Hijri date...</p>
+<body>
+    <header class="bg-green-700 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center">
+                <i class="fas fa-mosque text-2xl mr-3"></i>
+                <h1 class="text-xl font-bold">My Masjid</h1>
+            </div>
+            <nav class="flex items-center">
+                <div id="user-auth-section" class="flex items-center">
+                    <!-- Dynamic buttons will be added here by JavaScript -->
+                </div>
+            </nav>
         </div>
-        <div id="user-auth-section" class="flex items-center space-x-4 mt-4 sm:mt-0">
-            <!-- Quran button and Login/User Profile will be dynamically added here by auth-manager.js -->
+    </header>
+    <main class="container mx-auto p-4 md:p-8">
+        <!-- Main header section -->
+        <div class="bg-green-100 p-6 rounded-lg shadow-md mb-8 text-center md:text-left">
+            <h2 id="current-english-time-header" class="text-4xl md:text-6xl font-bold text-green-800">--:-- --</h2>
+            <p class="text-green-600 mt-2 text-lg">
+                <span id="current-english-day" class="font-medium"></span>,
+                <span id="current-english-date"></span>
+                <span id="hijri-date" class="block md:inline"></span>
+            </p>
+	    <p id="user-current-area" class="text-green-600 mt-1"></p>
         </div>
-    </div>
 
-    <!-- Main Content Area -->
-    <div class="container mx-auto px-4 py-8 flex-1">
-        <!-- Location and Masjid Selection Card -->
-        <div class="bg-gradient-to-br from-green-50 to-white rounded-2xl shadow-2xl p-6 mb-8 transform transition-transform duration-300 hover:scale-105">
-            <div class="flex items-center space-x-4 mb-4 border-b pb-4">
-                <i class="fas fa-search text-green-700 text-2xl"></i>
-                <div>
-                    <h2 class="text-2xl font-bold text-gray-800">Masjid & Location</h2>
-                    <p id="masjid-location-info" class="text-green-700 text-sm font-medium mt-1"></p>
+
+
+        <!-- Next Prayer and Location Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-700">Next Prayer: <span id="next-prayer-name" class="text-green-700"></span></h3>
+                        <p class="text-3xl font-bold text-green-800 mt-2"><span id="next-prayer-time">--:-- --</span></p>
+                        <p class="text-gray-500 mt-1">Time left: <span id="duration-left">--:--</span></p>
+                        
+                        <!-- NEW: Sehri and Iftari Timings -->
+                        <div class="grid grid-cols-2 gap-4 mt-4 text-center">
+                            <div>
+                                <p class="text-gray-600 font-semibold text-sm">Sehri Ends:</p>
+                                <p id="sehri-time-display" class="text-xl font-bold text-blue-700">--:--</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-600 font-semibold text-sm">Iftari Begins:</p>
+                                <p id="iftari-time-display" class="text-xl font-bold text-orange-700">--:--</p>
+                            </div>
+                        </div>
+                        <!-- END NEW -->
+
+                    </div>
                 </div>
             </div>
-
-            <div class="mb-4">
-                <select id="masjid-select" class="bg-green-100 text-green-800 font-medium py-3 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-green-500 transition">
-                    <option value="">Choose nearby masjid</option>
-                </select>
-                <div class="flex flex-wrap gap-2 mt-2">
-                    <button id="location-btn" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium py-2 px-4 rounded-lg transition" aria-label="Get My Location">
-                        <i class="fas fa-map-marker-alt mr-2"></i>My Location
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="flex items-center justify-between">
+                    <div class="flex-grow">
+                        <h3 class="text-xl font-semibold text-gray-700">Your Location</h3>
+                        <p id="user-current-location" class="text-green-700 mt-2">Getting location...</p>
+                    </div>
+                    <button id="location-btn" class="bg-green-700 text-white p-3 rounded-full hover:bg-green-600 transition-colors">
+                        <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button id="view-details-btn" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg transition hidden">
+                </div>
+            </div>
+        </div>
+
+        <!-- Masjid and Prayer Times Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="flex flex-col md:flex-row items-center justify-between mb-4">
+                <div class="w-full md:w-1/2 mb-4 md:mb-0">
+                    <label for="masjid-select" class="block text-sm font-medium text-gray-700">Masjid</label>
+                    <div class="flex">
+                        <select id="masjid-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md">
+                            <option value="">Select a Masjid</option>
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                        <p id="masjid-location-info" class="text-sm text-gray-500 ml-2 mt-auto"></p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="view-details-btn" class="bg-green-500 hover:bg-green-400 text-white py-2 px-4 rounded-full shadow-md transition-colors hidden">
                         <i class="fas fa-info-circle mr-2"></i>Details
                     </button>
-                    <button id="directions-btn" class="bg-green-100 hover:bg-green-200 text-green-800 font-medium py-2 px-4 rounded-lg transition hidden">
-                        <i class="fas fa-directions mr-2"></i>Directions
+                    <button id="directions-btn" class="bg-blue-500 hover:bg-blue-400 text-white py-2 px-4 rounded-full shadow-md transition-colors hidden">
+                        <i class="fas fa-map-marker-alt mr-2"></i>Directions
                     </button>
                 </div>
-                <p id="user-current-location" class="text-gray-500 text-sm mt-3"></p>
             </div>
 
-            <div class="text-center bg-green-50 rounded-xl p-4 shadow-inner">
-                <p class="text-4xl font-bold text-green-700 mb-2" id="current-time-main"></p>
-                <div class="flex flex-col md:flex-row justify-center md:space-x-8 text-gray-600">
-                    <div class="mb-2 md:mb-0">
-                        <p class="text-lg">Next Prayer: <span id="next-prayer-name" class="font-bold text-green-600">None</span></p>
-                        <p class="text-xl font-bold text-green-700">at <span id="next-prayer-time" class="font-medium">--:-- --</span></p>
-                    </div>
-                    <div class="flex items-center">
-                        <p class="text-lg">Duration Left: <span id="duration-left" class="font-bold text-green-600">--:--</span></p>
-                    </div>
-                </div>
-                <div class="flex flex-wrap justify-center space-x-4 mt-4 text-gray-600 text-sm">
-                    <p class="mt-1 flex items-center"><i class="fas fa-moon mr-2 text-blue-500"></i>Sehri End: <span id="sehri-time" class="font-medium text-green-600 ml-1">--:-- --</span></p>
-                    <p class="mt-1 flex items-center"><i class="fas fa-sun mr-2 text-yellow-500"></i>Iftari: <span id="iftari-time" class="font-medium text-green-600 ml-1">--:-- --</span></p>
-                </div>
+            <!-- Prayer times display area -->
+            <div id="prayer-times" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Prayer cards will be inserted here by JavaScript -->
             </div>
         </div>
+    </main>
 
-        <div id="prayer-times" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-    </div>
-
-    <!-- Footer Section -->
-    <footer class="bg-green-800 text-white py-4 mt-auto">
-        <div class="container mx-auto px-4 text-center text-sm">
-            <p>© 2023 Namaz Times App</p>
-            <p class="text-green-200 mt-1">Prayer times calculated for your selected masjid</p>
-        </div>
-    </footer>
-
-    <!-- Modals (kept in HTML for simplicity, could also be dynamically added by UI module) -->
-    <div id="custom-message-box" class="hidden"></div>
+    <!-- Modals -->
     <div id="masjid-details-modal-overlay" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>Masjid Details</h3>
-                <button id="modal-close-btn" class="modal-close-btn">×</button>
-            </div>
-            <div id="masjid-details-modal-body" class="modal-body"></div>
+            <span id="modal-close-btn" class="close-btn">×</span>
+            <h3 class="text-xl font-bold mb-4">Masjid Details</h3>
+            <div id="masjid-details-modal-body"></div>
         </div>
     </div>
+    
     <div id="profile-details-modal-overlay" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>User Profile</h3>
-                <button id="profile-modal-close-btn" class="modal-close-btn">×</button>
-            </div>
-            <div id="profile-details-modal-body" class="modal-body"></div>
+            <span id="profile-modal-close-btn" class="close-btn">×</span>
+            <h3 class="text-xl font-bold mb-4">User Profile</h3>
+            <div id="profile-details-modal-body"></div>
         </div>
     </div>
+
     <div id="change-password-modal-overlay" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>Change Password</h3>
-                <button id="change-password-modal-close-btn" class="modal-close-btn">×</button>
-            </div>
-            <div id="change-password-modal-body" class="modal-body">
-                <p class="mb-2">Enter your new password.</p>
-                <input type="password" id="new-password" placeholder="New Password" class="w-full p-2 border border-gray-300 rounded mb-2">
-                <input type="password" id="confirm-password" placeholder="Confirm Password" class="w-full p-2 border border-gray-300 rounded mb-4">
-                <button id="update-password-btn" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Update Password</button>
-            </div>
-        </div>
-    </div>
-    <div id="qibla-direction-modal-overlay" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Qibla Direction</h3>
-                <button id="qibla-direction-modal-close-btn" class="modal-close-btn">×</button>
-            </div>
-            <div id="qibla-direction-modal-body" class="modal-body text-center">
-                <p id="qibla-status" class="text-gray-500">Getting your location...</p>
-                <div id="qibla-indicator-container" class="mt-4"></div>
-            </div>
-        </div>
-    </div>
-    <div id="settings-modal-overlay" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Settings</h3>
-                <button id="settings-modal-close-btn" class="modal-close-btn">×</button>
-            </div>
-            <div id="settings-modal-body" class="modal-body">
-                <h4 class="font-semibold mb-2">Asr Calculation Method:</h4>
-                <div class="flex items-center mb-4">
-                    <input type="radio" id="asr-hanafi" name="asr-school" value="1" class="mr-2">
-                    <label for="asr-hanafi">Hanafi</label>
-                </div>
-                <div class="flex items-center mb-4">
-                    <input type="radio" id="asr-shafi" name="asr-school" value="0" class="mr-2">
-                    <label for="asr-shafi">Shafi</label>
-                </div>
-                <button id="save-settings-btn" class="w-full bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Save Settings</button>
+            <span id="change-password-modal-close-btn" class="close-btn">×</span>
+            <h3 class="text-xl font-bold mb-4">Change Password</h3>
+            <div class="space-y-4">
+                <input type="password" id="new-password" placeholder="New Password" class="w-full p-2 border rounded">
+                <input type="password" id="confirm-password" placeholder="Confirm Password" class="w-full p-2 border rounded">
+                <button id="update-password-btn" class="w-full bg-green-700 text-white py-2 rounded-lg hover:bg-green-600">Update Password</button>
             </div>
         </div>
     </div>
 
-    <!-- Main application script (module type is crucial for imports/exports) -->
-    <script type="module" src="./js/main.js"></script>
+    <div id="qibla-direction-modal-overlay" class="modal-overlay">
+        <div class="modal-content text-center">
+            <span id="qibla-direction-modal-close-btn" class="close-btn">×</span>
+            <h3 class="text-xl font-bold mb-4">Qibla Direction</h3>
+            <div id="qibla-indicator-container" class="mb-4"></div>
+            <p id="qibla-status" class="text-gray-700"></p>
+        </div>
+    </div>
+    
+    <div id="settings-modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <span id="settings-modal-close-btn" class="close-btn">×</span>
+            <h3 class="text-xl font-bold mb-4">Settings</h3>
+            <div class="space-y-4">
+                <p class="font-medium">Asr Calculation Method:</p>
+                <div class="flex items-center space-x-4">
+                    <label class="inline-flex items-center">
+                        <input type="radio" id="asr-shafi" name="asr-school" value="1" class="form-radio text-green-600">
+                        <span class="ml-2">Shafi'i (Standard)</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="radio" id="asr-hanafi" name="asr-school" value="0" class="form-radio text-green-600">
+                        <span class="ml-2">Hanafi</span>
+                    </label>
+                </div>
+                <button id="save-settings-btn" class="w-full bg-green-700 text-white py-2 rounded-lg hover:bg-green-600">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- The message box for custom messages -->
+    <div id="custom-message" class="hidden"></div>
+
+    <!-- The only script tag you need is for main.js -->
+    <script type="module" src="js/Namaztimes/main.js"></script>
 </body>
 </html>
