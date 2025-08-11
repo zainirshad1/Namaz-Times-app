@@ -11,10 +11,13 @@
     <h1 class="text-2xl font-bold mb-6 text-center">Login to Namaz Times</h1>
     <div id="error-msg" class="text-red-600 mb-4"></div>
     <div id="success-msg" class="text-green-600 mb-4 hidden"></div>
-    <input id="email" type="email" placeholder="Email" class="w-full p-3 border rounded mb-4" required />
-    <input id="password" type="password" placeholder="Password" class="w-full p-3 border rounded mb-4" required />
     
-    <button id="login-btn" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700">Login</button>
+    <form id="login-form">
+      <input id="email" type="email" placeholder="Email" class="w-full p-3 border rounded mb-4" required />
+      <input id="password" type="password" placeholder="Password" class="w-full p-3 border rounded mb-4" required />
+      <button type="submit" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700">Login</button>
+    </form>
+    
     <div class="mt-4 flex justify-between text-sm">
       <a href="register.html" class="text-green-700 hover:underline">Register</a>
       <a href="#" id="forgot-password" class="text-green-700 hover:underline">Forgot Password?</a>
@@ -22,12 +25,10 @@
   </div>
 
   <script type="module">
-    // Correctly import firebase-config.js from the js/ directory
     import { auth } from "./js/firebase-config.js";
     import { signInWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 
-    // Get DOM elements
-    const loginBtn = document.getElementById('login-btn');
+    const loginForm = document.getElementById('login-form');
     const errorMsg = document.getElementById('error-msg');
     const successMsg = document.getElementById('success-msg');
     const forgotPasswordLink = document.getElementById('forgot-password');
@@ -38,7 +39,8 @@
       successMsg.classList.add('hidden');
     }
 
-    loginBtn.addEventListener('click', async () => {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault(); 
       clearMessages();
 
       const email = document.getElementById('email').value.trim();
