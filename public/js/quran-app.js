@@ -1,11 +1,20 @@
 // Import Firebase services from your configuration file
 import { auth, db } from "./firebase-config.js";
-// UPDATED: Changed Firebase SDK version from 10.12.2 to 12.1.0
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-// UPDATED: Changed Firebase SDK version from 10.12.2 to 12.1.0
-import { doc, setDoc, getDoc, updateDoc, collection, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getDoc, collection, getDocs, doc, setDoc, updateDoc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-// ADDED THIS LOG: Check the value of db right after import
+// Import functions from refactored modules with updated paths
+import { fetchSurahs, fetchReciters, fetchScripts, fetchSurahData, fetchSurahAudio } from './Quran/quran-api.js';
+import {
+    displaySingleAyah, populateAyahDropdown, updateReadTabUIState,
+    updateDailyReadCount, loadReadingProgress, saveReadingProgress, updateRewardsEarned
+} from './Quran/quran-read.js';
+import {
+    displayFullSurah, stopPlayback, startRecitation, playNextAyah,
+    highlightAyah, updateDailyListenCount
+} from './Quran/quran-listen.js';
+import { navigatePreviousAyah, navigateNextAyah } from './Quran/quran-read.js';
+
 console.log("DB object on quran-app.js import:", db);
 
 // Global variables for application state
@@ -15,15 +24,12 @@ let isPlaying = false;
 let currentTab = 'listen'; // Default tab on load
 let surahs = [];
 let reciters = [];
-let scripts = []; // Corrected: Added 'let' to declare the variable
-let currentSurahData = null; // Stores Arabic and Translation text for current surah
-let currentSurahAudioData = null; // Stores audio URLs for current surah
-let listeningAyahIndex = 0; // Current ayah index for audio playback
-let currentAyahIndex = 0; // Current ayah index for reading mode
-let currentPlaybackSpeed = 1.0; // Audio playback speed
-
-// Firestore collection name for user progress
-const PROGRESS_COLLECTION = "userProgress";
+let scripts = [];
+let currentSurahData = null;
+let currentSurahAudioData = null;
+let listeningAyahIndex = 0;
+let currentAyahIndex = 0;
+let currentPlaybackSpeed = 1.0;
 
 // HTML element references (all checked for null before use)
 const userDisplayStatus = document.getElementById('user-display-status');
@@ -39,7 +45,7 @@ const scriptSelect = document.getElementById('script-select');
 const playPauseBtn = document.getElementById('play-pause-btn');
 const stopBtn = document.getElementById('stop-btn');
 const quranAudio = document.getElementById('quran-audio');
-const quranDisplay = document.getElementById('quran-display'); // For listen mode
+const quranDisplay = document.getElementById('quran-display');
 
 const tabListenBtn = document.getElementById('tab-listen');
 const tabReadBtn = document.getElementById('tab-read');
@@ -52,11 +58,10 @@ const scriptSelectRead = document.getElementById('script-select-read');
 const prevAyahBtn = document.getElementById('prev-ayah-btn');
 const nextAyahBtn = document.getElementById('next-ayah-btn');
 const startDoneReadingBtn = document.getElementById('start-done-reading-btn');
-const quranDisplayRead = document.getElementById('quran-display-read'); // For read mode
+const quranDisplayRead = document.getElementById('quran-display-read');
 
-// Dropdown containers (for showing/hiding based on tab)
 const reciterContainer = document.getElementById('reciter-container');
-const speedContainer = document.getElementById('speed-container'); // CORRECTED THIS LINE
+const speedContainer = document.getElementById('speed-container');
 const scriptContainer = document.getElementById('script-container');
 const scriptContainerRead = document.getElementById('script-container-read');
 
@@ -131,210 +136,36 @@ function setDisplayUsername(email, uid) {
 }
 
 /**
- * Fetches the list of all Surahs from the Al Quran Cloud API and populates the dropdowns.
+ * Populates a given select element with options based on provided data.
+ * @param {HTMLElement} selectElement - The select element to populate.
+ * @param {Array} data - The array of data to create options from.
+ * @param {string} valueKey - The key in each data object to use for the option's value.
+ * @param {string} textKey - The key in each data object to use for the option's text.
+ * @param {string} [englishTextKey] - An optional key for English text to append.
  */
-async function loadSurahs() {
-    showLoading();
-    try {
-        const response = await fetch('https://api.alquran.cloud/v1/surah');
-        const data = await response.json();
-        surahs = data.data;
-
-        if (surahSelect) {
-            surahSelect.innerHTML = '';
-            surahs.forEach(surah => {
-                const option = document.createElement('option');
-                option.value = surah.number;
-                option.textContent = `${surah.number}. ${surah.name} (${surah.englishName})`;
-                surahSelect.appendChild(option);
-            });
-        }
-        
-        if (surahSelectRead) {
-            surahSelectRead.innerHTML = '';
-            surahs.forEach(surah => {
-                const option = document.createElement('option');
-                option.value = surah.number;
-                option.textContent = `${surah.number}. ${surah.name} (${surah.englishName})`;
-                surahSelectRead.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error("Error fetching surahs:", error);
-        showError("Failed to load surah list. Please check your network connection.");
-    } finally {
-        hideLoading();
+function populateSelect(selectElement, data, valueKey, textKey, englishTextKey) {
+    if (selectElement) {
+        selectElement.innerHTML = '';
+        data.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item[valueKey];
+            option.textContent = item[textKey];
+            if (englishTextKey && item[englishTextKey]) {
+                option.textContent += ` (${item[englishTextKey]})`;
+            }
+            selectElement.appendChild(option);
+        });
     }
 }
 
-/**
- * Fetches the list of audio reciters from the Al Quran Cloud API and populates the dropdown.
- */
-async function loadReciters() {
-    showLoading();
-    try {
-        const response = await fetch('https://api.alquran.cloud/v1/edition/format/audio');
-        const data = await response.json();
-        reciters = data.data;
-        if (reciterSelect) {
-            reciterSelect.innerHTML = '';
-            reciters.forEach(reciter => {
-                const option = document.createElement('option');
-                option.value = reciter.identifier;
-                option.textContent = `${reciter.name} (${reciter.englishName})`;
-                reciterSelect.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error("Error fetching reciters:", error);
-        showError("Failed to load reciter list. Please check your network connection.");
-    } finally {
-        hideLoading();
-    }
-}
-
-/**
- * Fetches the list of available translation/script editions from the Al Quran Cloud API and populates the dropdowns.
- */
-async function loadScripts() {
-    showLoading();
-    try {
-        const response = await fetch('https://api.alquran.cloud/v1/edition/type/translation');
-        const data = await response.json();
-        // Filter for English text translations
-        scripts = data.data.filter(s => s.language === 'en' && s.format === 'text');
-        
-        if (scriptSelect) {
-            scriptSelect.innerHTML = '';
-            scripts.forEach(script => {
-                const option = document.createElement('option');
-                option.value = script.identifier;
-                option.textContent = script.englishName;
-                scriptSelect.appendChild(option);
-            });
-        }
-
-        if (scriptSelectRead) {
-            scriptSelectRead.innerHTML = '';
-            scripts.forEach(script => {
-                const option = document.createElement('option');
-                option.value = script.identifier;
-                option.textContent = script.englishName;
-                scriptSelectRead.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error("Error fetching scripts:", error);
-        showError("Failed to load script list. Please check your network connection.");
-    } finally {
-        hideLoading();
-    }
-}
-
-/**
- * Loads the Arabic text and a specified translation for a given Surah.
- * @param {string} surahNumber - The number of the Surah.
- * @param {string} scriptIdentifier - The identifier for the translation/script.
- */
-async function loadSurahData(surahNumber, scriptIdentifier) {
-    showLoading();
-    clearError();
-    try {
-        // Fetch Arabic text
-        const arabicResponse = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}`);
-        const arabicData = await arabicResponse.json();
-
-        // Fetch translation text
-        const translationResponse = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/${scriptIdentifier}`);
-        const translationData = await translationResponse.json();
-
-        currentSurahData = {
-            arabic: arabicData.data.ayahs.map(ayah => ({ number: ayah.numberInSurah, text: ayah.text })),
-            translation: translationData.data.ayahs.map(ayah => ({ number: ayah.numberInSurah, text: ayah.text }))
-        };
-    } catch (error) {
-        console.error("Error loading surah data:", error);
-        showError("Failed to load Surah data. Please check your network connection and selected script.");
-    } finally {
-        hideLoading();
-    }
-}
-
-/**
- * Loads the audio URLs for a given Surah and Reciter.
- * @param {string} surahNumber - The number of the Surah.
- * @param {string} reciterIdentifier - The identifier for the reciter.
- */
-async function loadSurahAudio(surahNumber, reciterIdentifier) {
-    showLoading();
-    clearError();
-    try {
-        const audioResponse = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/${reciterIdentifier}`);
-        const audioData = await audioResponse.json();
-        currentSurahAudioData = audioData.data.ayahs.map(ayah => ({ number: ayah.numberInSurah, audio: ayah.audio }));
-        
-        if (currentSurahAudioData.length > 0 && quranAudio) {
-            quranAudio.src = currentSurahAudioData[listeningAyahIndex].audio;
-        }
-    } catch (error) {
-        console.error("Error loading surah audio:", error);
-        showError("Failed to load Surah audio. Please check your network connection and selected reciter.");
-    } finally {
-        hideLoading();
-    }
-}
-
-/**
- * Updates the daily read ayah count in Firestore.
- */
-async function updateDailyReadCount() {
-    if (!userId) return; // Only track for logged-in users
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-    const docRef = doc(db, PROGRESS_COLLECTION, userId, "readingHistory", today);
-    
-    try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const currentReadCount = docSnap.data().read || 0;
-            await updateDoc(docRef, { read: currentReadCount + 1, timestamp: serverTimestamp() });
-        } else {
-            await setDoc(docRef, { read: 1, listen: 0, timestamp: serverTimestamp() });
-        }
-        displayUserDashboard(); // Update dashboard after count
-    } catch (error) {
-        console.error("Error updating daily read count:", error); // Added this line
-        showError("Failed to update daily read count. Permissions issue.");
-    }
-}
-
-/**
- * Updates the daily listened ayah count in Firestore.
- */
-async function updateDailyListenCount() {
-    if (!userId) return; // Only track for logged-in users
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-    const docRef = doc(db, PROGRESS_COLLECTION, userId, "readingHistory", today);
-    
-    try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const currentListenCount = docSnap.data().listen || 0;
-            await updateDoc(docRef, { listen: currentListenCount + 1, timestamp: serverTimestamp() });
-        } else {
-            await setDoc(docRef, { read: 0, listen: 1, timestamp: serverTimestamp() });
-        }
-        displayUserDashboard(); // Update dashboard after count
-    } catch (error) {
-        console.error("Error updating daily listen count:", error);
-        showError("Failed to update daily listen count. Permissions issue.");
-    }
-}
 
 /**
  * Loads and displays user progress data on the dashboard.
+ * @param {string} currentUserId - The current user's UID.
+ * @param {object} firestoreDb - The Firestore database instance.
  */
-async function displayUserDashboard() {
-    if (!userId) {
+async function displayUserDashboard(currentUserId, firestoreDb) {
+    if (!currentUserId) {
         // Clear dashboard if no user is logged in
         document.getElementById('total-read-today').textContent = '0';
         document.getElementById('total-read-week').textContent = '0';
@@ -345,51 +176,81 @@ async function displayUserDashboard() {
         document.getElementById('total-listen-month').textContent = '0';
         document.getElementById('total-listen-overall').textContent = '0';
         document.getElementById('rewards-accumulated').textContent = '0';
+        document.getElementById('rewards-redeemed').textContent = '0'; 
+        document.getElementById('rewards-available').textContent = '0'; 
         return;
     }
 
     let totalReadToday = 0, totalReadWeek = 0, totalReadMonth = 0, totalReadOverall = 0;
     let totalListenToday = 0, totalListenWeek = 0, totalListenMonth = 0, totalListenOverall = 0;
+    let rewardsEarned = 0, rewardsRedeemed = 0, rewardsAvailable = 0;
     
     const today = new Date();
-    // Set start of week to Sunday
-    const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
-    startOfWeek.setHours(0, 0, 0, 0); // Reset time to beginning of day
+    today.setHours(0, 0, 0, 0); // Reset time for accurate daily comparison
 
-    // Set start of month to 1st day
+    // Calculate start of week (Sunday)
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Calculate start of month (1st day)
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0); // Reset time to beginning of day
-    
-    const readingHistoryRef = collection(db, PROGRESS_COLLECTION, userId, "readingHistory");
-    
+    startOfMonth.setHours(0, 0, 0, 0);
+
     try {
-        const snapshot = await getDocs(readingHistoryRef);
-        
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            // Parse Firestore document ID as date (assuming YYYY-MM-DD format)
-            const docDate = new Date(doc.id);
-            docDate.setHours(0, 0, 0, 0); // Reset time for comparison
+        // Fetch daily read logs from 'users/{userId}/dailyReadLogs' collection
+        const readLogsRef = collection(firestoreDb, "users", currentUserId, "dailyReadLogs");
+        const readSnapshot = await getDocs(readLogsRef);
+        readSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const docDate = new Date(docSnap.id); // Assuming YYYY-MM-DD string ID
+            docDate.setHours(0, 0, 0, 0);
 
-            const read = data.read || 0;
-            const listen = data.listen || 0;
+            const count = data.count || 0;
+            totalReadOverall += count;
 
-            totalReadOverall += read;
-            totalListenOverall += listen;
-
-            if (docDate.toDateString() === today.toDateString()) {
-                totalReadToday = read;
-                totalListenToday = listen;
+            if (docDate.getTime() === today.getTime()) {
+                totalReadToday = count;
             }
             if (docDate >= startOfWeek) {
-                totalReadWeek += read;
-                totalListenWeek += listen;
+                totalReadWeek += count;
             }
             if (docDate >= startOfMonth) {
-                totalReadMonth += read;
-                totalListenMonth += listen;
+                totalReadMonth += count;
             }
         });
+
+        // Fetch daily listen logs from 'users/{userId}/dailyListenLogs' collection
+        const listenLogsRef = collection(firestoreDb, "users", currentUserId, "dailyListenLogs");
+        const listenSnapshot = await getDocs(listenLogsRef);
+        listenSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const docDate = new Date(docSnap.id); // Assuming YYYY-MM-DD string ID
+            docDate.setHours(0, 0, 0, 0);
+
+            const count = data.count || 0;
+            totalListenOverall += count;
+
+            if (docDate.getTime() === today.getTime()) {
+                totalListenToday = count;
+            }
+            if (docDate >= startOfWeek) {
+                totalListenWeek += count;
+            }
+            if (docDate >= startOfMonth) {
+                totalListenMonth += count;
+            }
+        });
+
+        // Fetch rewards summary from 'users/{userId}/quranData/rewardsTotals' document
+        const rewardsSummaryRef = doc(firestoreDb, "users", currentUserId, "quranData", "rewardsTotals");
+        const rewardsSnap = await getDoc(rewardsSummaryRef);
+        if (rewardsSnap.exists()) {
+            const data = rewardsSnap.data();
+            rewardsEarned = data.rewardsEarned || 0; 
+            rewardsRedeemed = data.rewardsRedeemed || 0; 
+            rewardsAvailable = data.rewardsAvailable || 0; 
+        }
 
         document.getElementById('total-read-today').textContent = totalReadToday.toString();
         document.getElementById('total-read-week').textContent = totalReadWeek.toString();
@@ -399,217 +260,16 @@ async function displayUserDashboard() {
         document.getElementById('total-listen-week').textContent = totalListenWeek.toString();
         document.getElementById('total-listen-month').textContent = totalListenMonth.toString();
         document.getElementById('total-listen-overall').textContent = totalListenOverall.toString();
-        document.getElementById('rewards-accumulated').textContent = (totalReadOverall + totalListenOverall).toString();
+        document.getElementById('rewards-accumulated').textContent = rewardsEarned.toString();
+        document.getElementById('rewards-redeemed').textContent = rewardsRedeemed.toString(); 
+        document.getElementById('rewards-available').textContent = rewardsAvailable.toString(); 
 
     } catch (error) {
         console.error("Error displaying user dashboard:", error);
-        showError("Failed to load user progress. Please check your network.");
+        showError("Failed to load user progress. Please check your network and Firebase rules.");
     }
 }
 
-/**
- * Displays the full Surah in the listen mode.
- */
-function displayFullSurah() {
-    if (!currentSurahData || !quranDisplay) return;
-    quranDisplay.innerHTML = ''; // Clear previous content
-
-    currentSurahData.arabic.forEach((ayah, index) => {
-        const ayahElement = document.createElement('div');
-        ayahElement.classList.add('ayah');
-        ayahElement.dataset.index = index; // Store index for highlighting
-        ayahElement.textContent = `${ayah.text} (${ayah.number})`;
-        
-        if (currentSurahData.translation && currentSurahData.translation[index]) {
-            const translationElement = document.createElement('p');
-            translationElement.classList.add('translation');
-            translationElement.textContent = currentSurahData.translation[index].text;
-            ayahElement.appendChild(translationElement);
-        }
-        quranDisplay.appendChild(ayahElement);
-    });
-
-    // Highlight the first ayah if audio is not playing
-    if (quranAudio && quranAudio.paused && quranAudio.currentTime === 0) {
-        highlightAyah(0);
-    }
-}
-
-/**
- * Displays a single Ayah for reading mode.
- * @param {number} index - The index of the Ayah to display (0-based).
- */
-function displaySingleAyah(index) {
-    if (!currentSurahData || !quranDisplayRead) return;
-    quranDisplayRead.innerHTML = ''; // Clear previous content
-    
-    const ayah = currentSurahData.arabic[index];
-    const translation = currentSurahData.translation[index];
-    
-    if (ayah) {
-        const ayahElement = document.createElement('p');
-        ayahElement.classList.add('ayah-read');
-        ayahElement.textContent = `${ayah.text} (${ayah.number})`;
-        quranDisplayRead.appendChild(ayahElement);
-    }
-    
-    if (translation) {
-        const translationElement = document.createElement('p');
-        translationElement.classList.add('translation');
-        translationElement.textContent = translation.text;
-        quranDisplayRead.appendChild(translationElement);
-    }
-    
-    // Ensure ayah dropdown matches current ayah
-    if (ayahSelect) {
-        ayahSelect.value = index;
-    }
-}
-
-/**
- * Populates the Ayah dropdown for the current Surah.
- */
-function populateAyahDropdown() {
-    if (!currentSurahData || !ayahSelect) return;
-    ayahSelect.innerHTML = ''; // Clear previous options
-    for (let i = 0; i < currentSurahData.arabic.length; i++) {
-        const option = document.createElement('option');
-        option.value = i;
-        option.textContent = `Ayah ${i + 1}`;
-        ayahSelect.appendChild(option);
-    }
-    ayahSelect.value = currentAyahIndex; // Set to current ayah
-}
-
-/**
- * Stops audio playback and resets player state.
- */
-function stopPlayback() {
-    if (quranAudio) quranAudio.pause();
-    isPlaying = false;
-    if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fas fa-play"></i> Play';
-    const highlighted = quranDisplay ? quranDisplay.querySelector('.ayah.highlight') : null;
-    if (highlighted) highlighted.classList.remove('highlight');
-    listeningAyahIndex = 0; // Reset audio ayah index
-}
-
-/**
- * Starts recitation from the current listeningAyahIndex.
- */
-async function startRecitation() {
-    if (!currentSurahAudioData || currentSurahAudioData.length === 0) {
-        showError("No audio available for this Surah with the selected reciter.");
-        return;
-    }
-    isPlaying = true;
-    if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
-    if (quranAudio) {
-        quranAudio.playbackRate = currentPlaybackSpeed;
-        quranAudio.src = currentSurahAudioData[listeningAyahIndex].audio;
-        // The play() promise might be rejected if the user hasn't interacted yet
-        await quranAudio.play().catch(e => {
-            console.error("Audio playback error:", e);
-            showError("Autoplay blocked. Please click play to start recitation.");
-            stopPlayback(); // Reset UI if autoplay fails
-        });
-    }
-    highlightAyah(listeningAyahIndex);
-}
-
-/**
- * Plays the next Ayah in the sequence. Called when current Ayah audio ends.
- */
-async function playNextAyah() {
-    if (listeningAyahIndex < currentSurahAudioData.length - 1) {
-        await updateDailyListenCount(); // Increment listen count for the just finished ayah
-        listeningAyahIndex++;
-        if (quranAudio) quranAudio.src = currentSurahAudioData[listeningAyahIndex].audio;
-        highlightAyah(listeningAyahIndex);
-        if (quranAudio) {
-             await quranAudio.play().catch(e => console.error("Audio playback error on next ayah:", e));
-        }
-    } else {
-        await updateDailyListenCount(); // Increment listen count for the last ayah
-        stopPlayback();
-        showConfirmation('End of Surah. Recitation completed.');
-    }
-}
-
-/**
- * Highlights the current Ayah being played or read.
- * @param {number} index - The index of the Ayah to highlight.
- */
-function highlightAyah(index) {
-    if (!quranDisplay) return;
-    const ayahs = quranDisplay.querySelectorAll('.ayah');
-    ayahs.forEach(ayah => ayah.classList.remove('highlight')); // Remove existing highlight
-
-    const currentAyah = quranDisplay.querySelector(`.ayah[data-index="${index}"]`);
-    if (currentAyah) {
-        currentAyah.classList.add('highlight');
-        // Scroll to the highlighted ayah if it's not in view
-        currentAyah.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-}
-
-/**
- * Updates the UI state of the "Start Reading" / "Done Reading" button.
- */
-function updateReadTabUIState() {
-    if (startDoneReadingBtn) {
-        if (isReadingActive) {
-            startDoneReadingBtn.innerHTML = '<i class="fas fa-check"></i> Done Reading';
-            startDoneReadingBtn.classList.remove('bg-green-600');
-            startDoneReadingBtn.classList.add('bg-red-600');
-        } else {
-            startDoneReadingBtn.innerHTML = '<i class="fas fa-play"></i> Start Reading';
-            startDoneReadingBtn.classList.remove('bg-red-600');
-            startDoneReadingBtn.classList.add('bg-green-600');
-        }
-    }
-}
-
-/**
- * Loads the user's last reading progress (last surah and ayah).
- */
-async function loadReadingProgress() {
-    if (!userId) return;
-    const userProgressDocRef = doc(db, PROGRESS_COLLECTION, userId);
-    try {
-        const docSnap = await getDoc(userProgressDocRef);
-        if (docSnap.exists() && docSnap.data().lastRead) {
-            const { surahNumber, ayahIndex } = docSnap.data().lastRead;
-            // Set initial dropdowns and current Ayah
-            if (surahSelectRead) surahSelectRead.value = surahNumber;
-            currentAyahIndex = ayahIndex;
-            showConfirmation(`Resumed from Surah ${surahNumber}, Ayah ${ayahIndex + 1}.`);
-        }
-    } catch (error) {
-        console.error("Error loading reading progress:", error);
-        showError("Failed to load reading progress. Permissions issue."); // Added this line
-    }
-}
-
-/**
- * Saves the user's current reading progress (current surah and ayah).
- */
-async function saveReadingProgress() {
-    if (!userId) return;
-    const userProgressDocRef = doc(db, PROGRESS_COLLECTION, userId);
-    try {
-        await setDoc(userProgressDocRef, {
-            lastRead: {
-                surahNumber: parseInt(surahSelectRead.value),
-                ayahIndex: currentAyahIndex
-            },
-            updatedAt: serverTimestamp()
-        }, { merge: true }); // Use merge to avoid overwriting other fields
-        showConfirmation("Reading progress saved!");
-    } catch (error) {
-        console.error("Error saving reading progress:", error);
-        showError("Failed to save reading progress. Permissions issue."); // Added this line
-    }
-}
 
 /**
  * Switches between "Listen" and "Read" tabs.
@@ -617,315 +277,483 @@ async function saveReadingProgress() {
  */
 async function switchTab(tabName) {
     currentTab = tabName;
-    stopPlayback(); // Stop any audio if switching tabs
-    isReadingActive = false; // Reset reading state
+    listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+    isReadingActive = false;
     
-    // Reset active classes for tab buttons
     if (tabListenBtn) tabListenBtn.classList.remove('active');
     if (tabReadBtn) tabReadBtn.classList.remove('active');
 
-    // Hide all tab contents initially
     if (listenTabContent) listenTabContent.classList.add('hidden');
     if (readTabContent) readTabContent.classList.add('hidden');
     
-    // Hide all specific dropdown containers initially
     if (reciterContainer) reciterContainer.classList.add('hidden');
     if (speedContainer) speedContainer.classList.add('hidden');
     if (scriptContainer) scriptContainer.classList.add('hidden');
     if (scriptContainerRead) scriptContainerRead.classList.add('hidden');
 
-    if (tabName === 'listen') {
-        if (tabListenBtn) tabListenBtn.classList.add('active');
-        if (listenTabContent) listenTabContent.classList.remove('hidden');
-        if (reciterContainer) reciterContainer.classList.remove('hidden');
-        if (speedContainer) speedContainer.classList.remove('hidden');
-        if (scriptContainer) scriptContainer.classList.remove('hidden');
-        
-        // Load data for listen tab
-        const selectedSurah = surahSelect ? surahSelect.value : '1';
-        const selectedScript = scriptSelect ? scriptSelect.value : 'en.ahmedali'; // Default to a valid script
-        const selectedReciter = reciterSelect ? reciterSelect.value : 'ar.alafasy'; // Default to a valid reciter
+    showLoading();
+    clearError();
+    try {
+        if (tabName === 'listen') {
+            if (tabListenBtn) tabListenBtn.classList.add('active');
+            if (listenTabContent) listenTabContent.classList.remove('hidden');
+            if (reciterContainer) reciterContainer.classList.remove('hidden');
+            if (speedContainer) speedContainer.classList.remove('hidden');
+            if (scriptContainer) scriptContainer.classList.remove('hidden');
+            
+            const selectedSurah = surahSelect ? surahSelect.value : '1';
+            const selectedScript = scriptSelect ? scriptSelect.value : 'en.ahmedali';
+            const selectedReciter = reciterSelect ? reciterSelect.value : 'ar.alafasy';
 
-        await loadSurahData(selectedSurah, selectedScript);
-        await loadSurahAudio(selectedSurah, selectedReciter);
-        displayFullSurah();
+            currentSurahData = await fetchSurahData(selectedSurah, selectedScript);
+            currentSurahAudioData = await fetchSurahAudio(selectedSurah, selectedReciter);
+            displayFullSurah(currentSurahData, quranDisplay, quranAudio, highlightAyah);
 
-    } else { // tabName === 'read'
-        if (tabReadBtn) tabReadBtn.classList.add('active');
-        if (readTabContent) readTabContent.classList.remove('hidden');
-        if (scriptContainerRead) scriptContainerRead.classList.remove('hidden');
-        
-        // Load data for read tab
-        const selectedSurahRead = surahSelectRead ? surahSelectRead.value : '1';
-        const selectedScriptRead = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali'; // Default to a valid script
-        
-        await loadSurahData(selectedSurahRead, selectedScriptRead);
-        displaySingleAyah(currentAyahIndex);
-        populateAyahDropdown();
+        } else { // tabName === 'read'
+            if (tabReadBtn) tabReadBtn.classList.add('active');
+            if (readTabContent) readTabContent.classList.remove('hidden');
+            if (scriptContainerRead) scriptContainerRead.classList.remove('hidden');
+            
+            const selectedSurahRead = surahSelectRead ? surahSelectRead.value : '1';
+            const selectedScriptRead = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali';
+            
+            currentSurahData = await fetchSurahData(selectedSurahRead, selectedScriptRead);
+            displaySingleAyah(currentAyahIndex, currentSurahData, quranDisplayRead, ayahSelect);
+            populateAyahDropdown(currentSurahData, ayahSelect, currentAyahIndex);
+        }
+    } catch (error) {
+        console.error("Error switching tab or loading initial tab data:", error);
+        showError("Failed to load tab content. Please check your network and selected options.");
+    } finally {
+        hideLoading();
     }
-    updateReadTabUIState(); // Ensure button text is correct after tab switch
+    updateReadTabUIState(startDoneReadingBtn, isReadingActive);
 }
+
 
 /**
  * Initializes Firebase, authenticates user, and sets up all event listeners.
  */
 async function initializeAppAndListeners() {
     try {
-        // Removed the conditional signInAnonymously call here.
-        // onAuthStateChanged will handle initial session detection.
+        // No direct signInAnonymously call here.
+        // onAuthStateChanged will handle initial session detection and anonymous sign-in.
     } catch (e) {
-        // This catch block is now mostly redundant for initial sign-in,
-        // as the actual sign-in is managed within onAuthStateChanged.
-        // Keeping it for any unforeseen synchronous errors during init.
         console.error("Error during initial app setup:", e);
         showError("Could not initialize app. Please check your network and Firebase Auth settings.");
     }
 
     // Listen for Firebase authentication state changes
     onAuthStateChanged(auth, async (user) => {
+        console.log("onAuthStateChanged triggered. Initial user:", user ? user.uid : "null");
         if (user) {
-            // User is signed in (could be anonymously or via other methods like email/password)
             userId = user.uid;
-            // Updated to pass both email and UID to display
-            setDisplayUsername(user.email, user.uid); 
-            console.log("onAuthStateChanged: User is authenticated. userId:", userId); // Added log
+            setDisplayUsername(user.email, user.uid);
+            console.log("onAuthStateChanged: User is authenticated. userId:", userId);
             
-            // Load all necessary data concurrently
-            await Promise.all([
-                loadSurahs(),
-                loadReciters(),
-                loadScripts(),
-                displayUserDashboard(), // Load user progress
-                loadReadingProgress()   // Load last read position
-            ]);
-            // Initialize tab display after all data is loaded
-            await switchTab(currentTab);
+            // --- Ensure the user's root document and new grouping documents/collections exist ---
+            const userDocRef = doc(db, "users", userId);
+            // Paths for new collections with a document inside them
+            const profileDocRef = doc(db, "users", userId, "personalDetails", "profile");
+            const quranDataSummaryDocRef = doc(db, "users", userId, "quranData", "quranSummary");
+            const quranDataRewardsDocRef = doc(db, "users", userId, "quranData", "rewardsTotals");
+            const quranDataLastReadDocRef = doc(db, "users", userId, "quranData", "lastReadProgress");
+            const appSettingsDocRef = doc(db, "users", userId, "appSettings", "defaults");
 
-        } else {
-            // User is signed out or no persisted session was found.
-            // Attempt anonymous sign-in now if desired for unauthenticated users.
             try {
-                const anonymousUserCredential = await signInAnonymously(auth); // Get credential
-                userId = anonymousUserCredential.user.uid; // Set userId to the new anonymous UID
-                // Updated to pass null for email (as it's anonymous) and the new UID
-                setDisplayUsername(null, userId); 
-                console.log("onAuthStateChanged: Signed in anonymously. userId:", userId); // Added log
-                
-                // Now load data for this anonymous user
-                await Promise.all([
-                    loadSurahs(),
-                    loadReciters(),
-                    loadScripts(),
-                    displayUserDashboard(), // Load dashboard for anonymous user
-                    loadReadingProgress()   // Load progress for anonymous user
+                // Ensure the top-level user document exists
+                await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
+                // Create the default documents within the new collections
+                await setDoc(profileDocRef, {}, { merge: true });
+                await setDoc(appSettingsDocRef, {}, { merge: true });
+                await setDoc(quranDataSummaryDocRef, {}, { merge: true }); // General summary for quranData
+                await setDoc(quranDataRewardsDocRef, { rewardsEarned: 0, rewardsRedeemed: 0, rewardsAvailable: 0 }, { merge: true }); // Initialize rewards
+
+                // Initialize quranDataLastReadDocRef ONLY if it doesn't exist
+                const lastReadProgressSnap = await getDoc(quranDataLastReadDocRef);
+                if (!lastReadProgressSnap.exists()) {
+                    await setDoc(quranDataLastReadDocRef, { surahNumber: 1, ayahIndex: 0, updatedAt: serverTimestamp() });
+                    console.log("Initialized last read progress for new user/document:", userId);
+                } else {
+                    console.log("lastReadProgress document already exists for user:", userId);
+                }
+                console.log("Firebase structure initialized/verified for user:", userId);
+
+            } catch (e) {
+                console.error("Error ensuring user/grouping documents exist:", e);
+                showError("Failed to initialize user profile structure.");
+            }
+            // --- END NEW ---
+
+            showLoading();
+            try {
+                const [fetchedSurahs, fetchedReciters, fetchedScripts] = await Promise.all([
+                    fetchSurahs(),
+                    fetchReciters(),
+                    fetchScripts()
                 ]);
+
+                surahs = fetchedSurahs;
+                reciters = fetchedReciters;
+                scripts = fetchedScripts;
+
+                populateSelect(surahSelect, surahs, 'number', 'name', 'englishName');
+                populateSelect(surahSelectRead, surahs, 'number', 'name', 'englishName');
+                populateSelect(reciterSelect, reciters, 'identifier', 'name', 'englishName');
+                populateSelect(scriptSelect, scripts, 'identifier', 'englishName');
+                populateSelect(scriptSelectRead, scripts, 'identifier', 'englishName');
+
+                await displayUserDashboard(userId, db);
+                const lastReadData = await loadReadingProgress(userId, db, surahSelectRead, showConfirmation, showError);
+                if (lastReadData) {
+                    currentAyahIndex = lastReadData.ayahIndex; 
+                    if (surahSelectRead) surahSelectRead.value = lastReadData.surahNumber;
+                    console.log("Loaded last read progress:", lastReadData);
+                } else {
+                    console.log("No last read progress found for user:", userId, "Starting from Surah 1, Ayah 1.");
+                    currentAyahIndex = 0; // Default to first ayah
+                    if (surahSelectRead) surahSelectRead.value = '1'; // Default to first surah
+                }
+
                 await switchTab(currentTab);
+            } catch (error) {
+                console.error("Error loading initial data:", error);
+                showError("Failed to load essential app data. Please refresh.");
+            } finally {
+                hideLoading();
+            }
+
+        } else { // Anonymous user scenario
+            try {
+                const anonymousUserCredential = await signInAnonymously(auth);
+                userId = anonymousUserCredential.user.uid;
+                setDisplayUsername(null, userId);
+                console.log("onAuthStateChanged: Successfully signed in anonymously. New userId:", userId);
+                
+                // --- Ensure the anonymous user's root document and new grouping documents/collections exist ---
+                const userDocRef = doc(db, "users", userId);
+                const profileDocRef = doc(db, "users", userId, "personalDetails", "profile");
+                const quranDataSummaryDocRef = doc(db, "users", userId, "quranData", "quranSummary");
+                const quranDataRewardsDocRef = doc(db, "users", userId, "quranData", "rewardsTotals");
+                const quranDataLastReadDocRef = doc(db, "users", userId, "quranData", "lastReadProgress");
+                const appSettingsDocRef = doc(db, "users", userId, "appSettings", "defaults");
+                try {
+                    await setDoc(userDocRef, { lastLogin: serverTimestamp(), isAnonymous: true }, { merge: true }); 
+                    await setDoc(profileDocRef, {}, { merge: true });
+                    await setDoc(appSettingsDocRef, {}, { merge: true });
+                    await setDoc(quranDataSummaryDocRef, {}, { merge: true });
+                    await setDoc(quranDataRewardsDocRef, { rewardsEarned: 0, rewardsRedeemed: 0, rewardsAvailable: 0 }, { merge: true }); // Initialize rewards
+                    
+                    // Initialize quranDataLastReadDocRef ONLY if it doesn't exist for anonymous users
+                    const lastReadProgressSnap = await getDoc(quranDataLastReadDocRef);
+                    if (!lastReadProgressSnap.exists()) {
+                        await setDoc(quranDataLastReadDocRef, { surahNumber: 1, ayahIndex: 0, updatedAt: serverTimestamp() });
+                        console.log("Initialized last read progress for new anonymous user/document:", userId);
+                    } else {
+                        console.log("lastReadProgress document already exists for anonymous user:", userId);
+                    }
+                    console.log("Firebase structure initialized/verified for anonymous user:", userId);
+                } catch (e) {
+                    console.error("Error ensuring anonymous user/grouping documents exist:", e);
+                    showError("Failed to initialize anonymous user profile structure.");
+                }
+                // --- END NEW ---
+
+                showLoading();
+                try {
+                    const [fetchedSurahs, fetchedReciters, fetchedScripts] = await Promise.all([
+                        fetchSurahs(),
+                        fetchReciters(),
+                        fetchScripts()
+                    ]);
+
+                    surahs = fetchedSurahs;
+                    reciters = fetchedReciters;
+                    scripts = fetchedScripts;
+
+                    populateSelect(surahSelect, surahs, 'number', 'name', 'englishName');
+                    populateSelect(surahSelectRead, surahs, 'number', 'name', 'englishName');
+                    populateSelect(reciterSelect, reciters, 'identifier', 'name', 'englishName');
+                    populateSelect(scriptSelect, scripts, 'identifier', 'englishName');
+                    populateSelect(scriptSelectRead, scripts, 'identifier', 'englishName');
+
+                    await displayUserDashboard(userId, db);
+                    const lastReadData = await loadReadingProgress(userId, db, surahSelectRead, showConfirmation, showError);
+                    if (lastReadData) {
+                        currentAyahIndex = lastReadData.ayahIndex; 
+                        if (surahSelectRead) surahSelectRead.value = lastReadData.surahNumber;
+                        console.log("Loaded last read progress (anonymous):", lastReadData);
+                    } else {
+                        console.log("No last read progress found for anonymous user:", userId, "Starting from Surah 1, Ayah 1.");
+                        currentAyahIndex = 0; // Default to first ayah
+                        if (surahSelectRead) surahSelectRead.value = '1'; // Default to first surah
+                    }
+
+                    await switchTab(currentTab);
+                } catch (error) {
+                    console.error("Error loading initial data for anonymous user:", error);
+                    showError("Failed to load essential app data as guest. Please refresh.");
+                } finally {
+                    hideLoading();
+                }
 
             } catch (e) {
                 console.error("Error signing in anonymously for guest user:", e);
                 showError("Could not sign in as guest. Please ensure Anonymous Auth is enabled in Firebase.");
                 
-                // If anonymous sign-in fails, userId remains null, and dashboard will clear
                 userId = null;
-                setDisplayUsername("Guest User (Login Failed)", null); // Indicate login failed, no UID
-                console.log("onAuthStateChanged: Anonymous sign-in failed. userId:", userId); // Added log
+                setDisplayUsername("Guest User (Login Failed)", null);
+                console.log("onAuthStateChanged: Anonymous sign-in failed. userId:", userId);
                 
-                // Still load essential UI data even without a user
-                await Promise.all([
-                    loadSurahs(),
-                    loadReciters(),
-                    loadScripts()
-                ]);
-                displayUserDashboard(); // Will show zeros
-                await loadSurahData('1', 'en.ahmedali');
-                await loadSurahAudio('1', 'ar.alafasy');
-                await switchTab(currentTab);
+                showLoading();
+                try {
+                    const [fetchedSurahs, fetchedReciters, fetchedScripts] = await Promise.all([
+                        fetchSurahs(),
+                        fetchReciters(),
+                        fetchScripts()
+                    ]);
+                    surahs = fetchedSurahs;
+                    reciters = fetchedReciters;
+                    scripts = fetchedScripts;
+
+                    populateSelect(surahSelect, surahs, 'number', 'name', 'englishName');
+                    populateSelect(surahSelectRead, surahs, 'number', 'name', 'englishName');
+                    populateSelect(reciterSelect, reciters, 'identifier', 'name', 'englishName');
+                    populateSelect(scriptSelect, scripts, 'identifier', 'englishName');
+                    populateSelect(scriptSelectRead, scripts, 'identifier', 'englishName');
+
+                    displayUserDashboard(userId, db); // Display dashboard even if no user ID
+                    currentSurahData = await fetchSurahData('1', 'en.ahmedali');
+                    currentSurahAudioData = await fetchSurahAudio('1', 'ar.alafasy');
+                    await switchTab(currentTab);
+                } catch (error) {
+                    console.error("Error loading fallback data:", error);
+                    showError("Failed to load fallback app data.");
+                } finally {
+                    hideLoading();
+                }
             }
         }
     });
 
     // --- Event Listeners ---
 
-    // Audio player events
-    if (quranAudio) quranAudio.addEventListener('ended', playNextAyah);
-
-    // Play/Pause and Stop buttons for audio
-    if (playPauseBtn) playPauseBtn.addEventListener('click', () => {
-        if (isPlaying) {
-            if (quranAudio) quranAudio.pause();
+    if (quranAudio) quranAudio.addEventListener('ended', async () => {
+        const { newAyahIndex, playbackStopped } = await playNextAyah(
+            listeningAyahIndex, currentSurahAudioData, quranAudio,
+            updateDailyListenCount,
+            () => stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex),
+            showConfirmation, highlightAyah,
+            { userId, db, displayUserDashboard: () => displayUserDashboard(userId, db), showError, quranDisplay, playPauseBtn }
+        );
+        listeningAyahIndex = newAyahIndex;
+        if (playbackStopped) {
             isPlaying = false;
             if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+        }
+    });
+
+    if (playPauseBtn) playPauseBtn.addEventListener('click', async () => {
+        if (isPlaying) {
+            listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+            isPlaying = false;
         } else {
-            // If paused and has current time, resume
             if (quranAudio && quranAudio.paused && quranAudio.currentTime > 0) {
                 if (quranAudio) quranAudio.play().catch(e => console.error("Audio resume error:", e));
                 isPlaying = true;
                 if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
-                highlightAyah(listeningAyahIndex);
+                highlightAyah(listeningAyahIndex, quranDisplay);
             } else {
-                // Otherwise, start from beginning
                 listeningAyahIndex = 0;
-                startRecitation();
+                isPlaying = await startRecitation(
+                    currentSurahAudioData, listeningAyahIndex, quranAudio, playPauseBtn,
+                    (idx) => highlightAyah(idx, quranDisplay),
+                    showError,
+                    () => stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex),
+                    currentPlaybackSpeed, quranDisplay
+                );
             }
         }
     });
-    if (stopBtn) stopBtn.addEventListener('click', stopPlayback);
+    if (stopBtn) stopBtn.addEventListener('click', () => {
+        listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+        isPlaying = false;
+    });
     
-    // Surah selection for Listen tab
     if (surahSelect) surahSelect.addEventListener('change', async () => {
-        stopPlayback();
-        listeningAyahIndex = 0; // Reset audio to first ayah of new surah
+        listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+        isPlaying = false;
         clearError();
-        const selectedSurah = surahSelect.value;
-        const selectedScript = scriptSelect ? scriptSelect.value : 'en.ahmedali';
-        const selectedReciter = reciterSelect ? reciterSelect.value : 'ar.alafasy';
-        await loadSurahData(selectedSurah, selectedScript);
-        await loadSurahAudio(selectedSurah, selectedReciter);
-        displayFullSurah();
+        showLoading();
+        try {
+            const selectedSurah = surahSelect.value;
+            const selectedScript = scriptSelect ? scriptSelect.value : 'en.ahmedali';
+            const selectedReciter = reciterSelect ? reciterSelect.value : 'ar.alafasy';
+            currentSurahData = await fetchSurahData(selectedSurah, selectedScript);
+            currentSurahAudioData = await fetchSurahAudio(selectedSurah, selectedReciter);
+            displayFullSurah(currentSurahData, quranDisplay, quranAudio, highlightAyah);
+
+        } catch (error) {
+            console.error("Error changing surah (Listen tab):", error);
+            showError("Failed to load new Surah data.");
+        } finally {
+            hideLoading();
+        }
     });
 
-    // Reciter selection for Listen tab
     if (reciterSelect) reciterSelect.addEventListener('change', async () => {
-        stopPlayback();
-        listeningAyahIndex = 0; // Reset audio to first ayah of new reciter
+        listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+        isPlaying = false;
         clearError();
-        const selectedSurah = surahSelect ? surahSelect.value : '1';
-        const selectedReciter = reciterSelect.value;
-        await loadSurahAudio(selectedSurah, selectedReciter);
+        showLoading();
+        try {
+            const selectedSurah = surahSelect ? surahSelect.value : '1';
+            const selectedReciter = reciterSelect.value;
+            currentSurahAudioData = await fetchSurahAudio(selectedSurah, selectedReciter);
+        } catch (error) {
+            console.error("Error changing reciter (Listen tab):", error);
+            showError("Failed to load new Reciter audio.");
+        } finally {
+            hideLoading();
+        }
     });
 
-    // Speed selection for Listen tab
     if (speedSelect) speedSelect.addEventListener('change', () => {
         currentPlaybackSpeed = parseFloat(speedSelect.value);
         if (quranAudio) quranAudio.playbackRate = currentPlaybackSpeed;
     });
 
-    // Script selection for Listen tab
     if (scriptSelect) scriptSelect.addEventListener('change', async () => {
-        stopPlayback();
+        listeningAyahIndex = stopPlayback(quranAudio, playPauseBtn, quranDisplay, listeningAyahIndex);
+        isPlaying = false;
         clearError();
-        const selectedSurah = surahSelect ? surahSelect.value : '1';
-        const selectedScript = scriptSelect.value;
-        await loadSurahData(selectedSurah, selectedScript);
-        displayFullSurah();
+        showLoading();
+        try {
+            const selectedSurah = surahSelect ? surahSelect.value : '1';
+            const selectedScript = scriptSelect.value;
+            currentSurahData = await fetchSurahData(selectedSurah, selectedScript);
+            displayFullSurah(currentSurahData, quranDisplay, quranAudio, highlightAyah);
+        } catch (error) {
+            console.error("Error changing script (Listen tab):", error);
+            showError("Failed to load new Script data.");
+        } finally {
+            hideLoading();
+        }
     });
     
-    // Tab switching buttons
     if (tabListenBtn) tabListenBtn.addEventListener('click', () => switchTab('listen'));
     if (tabReadBtn) tabReadBtn.addEventListener('click', () => switchTab('read'));
     
-    // Surah selection for Read tab
     if (surahSelectRead) surahSelectRead.addEventListener('change', async () => {
         clearError();
-        currentAyahIndex = 0; // Reset read ayah to first of new surah
-        const selectedSurahRead = surahSelectRead.value;
-        const selectedScriptRead = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali';
-        await loadSurahData(selectedSurahRead, selectedScriptRead);
-        displaySingleAyah(currentAyahIndex);
-        populateAyahDropdown();
-        updateReadTabUIState();
+        showLoading();
+        try {
+            currentAyahIndex = 0;
+            const selectedSurahRead = surahSelectRead.value;
+            const selectedScriptRead = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali';
+            currentSurahData = await fetchSurahData(selectedSurahRead, selectedScriptRead);
+            displaySingleAyah(currentAyahIndex, currentSurahData, quranDisplayRead, ayahSelect);
+            populateAyahDropdown(currentSurahData, ayahSelect, currentAyahIndex);
+            updateReadTabUIState(startDoneReadingBtn, isReadingActive);
+        }  catch (error) {
+            console.error("Error changing surah (Read tab):", error);
+            showError("Failed to load new Surah data for reading.");
+        } finally {
+            hideLoading();
+        }
     });
     
-    // Ayah selection for Read tab
     if (ayahSelect) ayahSelect.addEventListener('change', () => {
         clearError();
         currentAyahIndex = parseInt(ayahSelect.value);
-        displaySingleAyah(currentAyahIndex);
-        updateReadTabUIState();
+        displaySingleAyah(currentAyahIndex, currentSurahData, quranDisplayRead, ayahSelect);
+        updateReadTabUIState(startDoneReadingBtn, isReadingActive);
     });
     
-    // Script selection for Read tab
     if (scriptSelectRead) scriptSelectRead.addEventListener('change', async () => {
         clearError();
-        const selectedSurahRead = surahSelectRead ? surahSelectRead.value : '1';
-        const selectedScriptRead = scriptSelectRead.value;
-        await loadSurahData(selectedSurahRead, selectedScriptRead);
-        displaySingleAyah(currentAyahIndex);
+        showLoading();
+        try {
+            const selectedSurahRead = surahSelectRead ? surahSelectRead.value : '1';
+            const selectedScriptRead = scriptSelectRead.value;
+            currentSurahData = await fetchSurahData(selectedSurahRead, selectedScriptRead);
+            displaySingleAyah(currentAyahIndex, currentSurahData, quranDisplayRead, ayahSelect);
+        } catch (error) {
+            console.error("Error changing script (Read tab):", error);
+            showError("Failed to load new Script data.");
+        } finally {
+            hideLoading();
+        }
     });
     
-    // Navigation buttons for Read tab
     if (prevAyahBtn) prevAyahBtn.addEventListener('click', async () => {
-        clearError();
-        if (!currentSurahData) { showError('No Surah data loaded for reading.'); return; }
-        
-        if (currentAyahIndex > 0) {
-            currentAyahIndex--;
-            if (isReadingActive) await updateDailyReadCount();
-        } else {
-            // Go to previous surah if at the first ayah
-            const currentSurahNumber = parseInt(surahSelectRead ? surahSelectRead.value : '1');
-            const prevSurahNumber = currentSurahNumber - 1;
-            if (prevSurahNumber >= 1) {
-                const prevSurahData = surahs.find(s => s.number === prevSurahNumber);
-                if (prevSurahData) {
-                    if (surahSelectRead) surahSelectRead.value = prevSurahNumber;
-                    currentAyahIndex = prevSurahData.numberOfAyahs - 1; // Last ayah of previous surah
-                    const scriptIdentifier = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali';
-                    await loadSurahData(prevSurahNumber.toString(), scriptIdentifier);
-                    if (isReadingActive) await updateDailyReadCount();
-                    showConfirmation(`Moved to Surah ${prevSurahNumber}, Ayah ${currentAyahIndex + 1}.`);
-                } else { showError('Could not find data for the previous Surah.'); }
-            } else { showError('You are at the beginning of the Quran!'); }
-        }
-        populateAyahDropdown(); // Update dropdown
-        displaySingleAyah(currentAyahIndex);
-        updateReadTabUIState();
+        console.log("Navigating to previous Ayah. Current Ayah:", currentAyahIndex, "Current Surah:", surahSelectRead?.value);
+        const { newAyahIndex, newSurahData } = await navigatePreviousAyah({
+            currentAyahIndex, currentSurahData, surahs, surahSelectRead, scriptSelectRead,
+            updateDailyReadCount, showError, showConfirmation,
+            displaySingleAyah: (idx, data) => displaySingleAyah(idx, data, quranDisplayRead, ayahSelect),
+            populateAyahDropdown: (data, select, idx) => populateAyahDropdown(data, select, idx),
+            updateReadTabUIState: () => updateReadTabUIState(startDoneReadingBtn, isReadingActive),
+            userId, db, displayUserDashboard: () => displayUserDashboard(userId, db),
+            ayahSelect: ayahSelect, 
+            quranDisplayRead: quranDisplayRead 
+        });
+        currentAyahIndex = newAyahIndex;
+        currentSurahData = newSurahData || currentSurahData; 
+        console.log("After previous Ayah navigation. New Ayah:", currentAyahIndex, "New Surah Data:", currentSurahData);
     });
     
     if (nextAyahBtn) nextAyahBtn.addEventListener('click', async () => {
-        clearError();
-        if (!currentSurahData) { showError('No Surah data loaded for reading.'); return; }
+        console.log("Navigating to next Ayah. Current Ayah:", currentAyahIndex, "Current Surah:", surahSelectRead?.value);
+        const { newAyahIndex, newSurahData } = await navigateNextAyah({
+            currentAyahIndex, currentSurahData, surahs, surahSelectRead, scriptSelectRead,
+            isReadingActive, updateDailyReadCount,
+            saveReadingProgress: (uid, fdb, surahSel, ayahIdx, confirmCb, errorCb) => saveReadingProgress(uid, fdb, surahSel, ayahIdx, confirmCb, errorCb),
+            showError, showConfirmation,
+            displaySingleAyah: (idx, data) => displaySingleAyah(idx, data, quranDisplayRead, ayahSelect),
+            populateAyahDropdown: (data, select, idx) => populateAyahDropdown(data, select, idx),
+            updateReadTabUIState: () => updateReadTabUIState(startDoneReadingBtn, isReadingActive),
+            userId, db, displayUserDashboard: () => displayUserDashboard(userId, db),
+            ayahSelect: ayahSelect, 
+            quranDisplayRead: quranDisplayRead 
+        });
+        currentAyahIndex = newAyahIndex;
+        currentSurahData = newSurahData || currentSurahData; 
+        console.log("After next Ayah navigation. New Ayah:", currentAyahIndex, "New Surah Data:", currentSurahData);
 
-        if (currentAyahIndex < currentSurahData.arabic.length - 1) {
-            currentAyahIndex++;
-            if (isReadingActive) await updateDailyReadCount();
-        } else {
-            // Go to next surah if at the last ayah
-            const currentSurahNumber = parseInt(surahSelectRead ? surahSelectRead.value : '1');
-            const nextSurahNumber = currentSurahNumber + 1;
-            if (nextSurahNumber <= 114) {
-                const nextSurahData = surahs.find(s => s.number === nextSurahNumber);
-                if (nextSurahData) {
-                    if (surahSelectRead) surahSelectRead.value = nextSurahNumber;
-                    currentAyahIndex = 0; // First ayah of next surah
-                    const scriptIdentifier = scriptSelectRead ? scriptSelectRead.value : 'en.ahmedali';
-                    await loadSurahData(nextSurahNumber.toString(), scriptIdentifier);
-                    if (isReadingActive) await updateDailyReadCount();
-                    showConfirmation(`Moved to Surah ${nextSurahNumber}, Ayah ${currentAyahIndex + 1}.`);
-                } else { showError('Could not find data for the next Surah.'); }
-            } else {
-                showConfirmation('You have reached the end of the Quran! Congratulations!');
-                if (isReadingActive) {
-                    isReadingActive = false;
-                    saveReadingProgress(); // Save final progress
-                }
-            }
+        if (currentAyahIndex === 0 && newSurahData && parseInt(surahSelectRead.value) === 1) { 
+             // This condition seems specific for the end of the Quran if it wraps around to Surah 1, Ayah 1.
+             // If the user truly finishes the entire Quran, the logic inside the navigateNextAyah handles it.
+             // This might be redundant or indicative of a specific edge case for wrapping.
+             // Consider reviewing if this precise check is still needed or if navigateNextAyah's "end of Quran" handling is sufficient.
+             // For now, retaining it as per your code.
+             if (currentSurahData.arabic.length -1 == currentAyahIndex) {
+                 isReadingActive = false;
+                 updateReadTabUIState(startDoneReadingBtn, isReadingActive);
+             }
         }
-        populateAyahDropdown(); // Update dropdown
-        displaySingleAyah(currentAyahIndex);
-        updateReadTabUIState();
     });
     
-    // Start/Done Reading button
-    if (startDoneReadingBtn) startDoneReadingBtn.addEventListener('click', () => {
-        isReadingActive = !isReadingActive; // Toggle reading session status
-        if (!isReadingActive) {
-            saveReadingProgress(); // Save progress when session ends
+    if (startDoneReadingBtn) startDoneReadingBtn.addEventListener('click', async () => {
+        isReadingActive = !isReadingActive;
+        console.log("Start/Done Reading button clicked. isReadingActive set to:", isReadingActive);
+        if (!isReadingActive) { // If reading session is ending
+            console.log("Saving reading progress. User ID:", userId, "Surah Select Value:", surahSelectRead?.value, "Current Ayah Index:", currentAyahIndex);
+            await saveReadingProgress(userId, db, surahSelectRead, currentAyahIndex, showConfirmation, showError);
             if (readingSummary) {
                 readingSummary.textContent = "Reading session ended.";
                 readingSummary.classList.remove('hidden');
                 setTimeout(() => readingSummary.classList.add('hidden'), 3000);
             }
-        } else {
+        } else { // If reading session is starting
             if (readingSummary) {
                 readingSummary.textContent = "Reading session started.";
                 readingSummary.classList.remove('hidden');
                 setTimeout(() => readingSummary.classList.add('hidden'), 3000);
             }
         }
-        updateReadTabUIState();
+        updateReadTabUIState(startDoneReadingBtn, isReadingActive);
     });
 }
 
-// Initialize the app when the window loads
 window.onload = initializeAppAndListeners;
